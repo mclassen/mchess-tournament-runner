@@ -53,7 +53,7 @@ jobs:
         run: |
           cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
           cmake --build build --target mchess -j"$(nproc)"
-          MCHESS_BASE=$(find build -maxdepth 1 -type f -name 'mchess_*' | head -n1)
+          MCHESS_BASE=$(find build -maxdepth 1 -type f -executable -name 'mchess_[0-9]*' | head -n1)
           if [ -z "$MCHESS_BASE" ]; then
             echo "No mchess_* binary found for base_ref"; exit 1
           fi
@@ -64,7 +64,7 @@ jobs:
         run: |
           cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
           cmake --build build --target mchess -j"$(nproc)"
-          MCHESS_FEATURE=$(find build -maxdepth 1 -type f -name 'mchess_*' | head -n1)
+          MCHESS_BASE=$(find build -maxdepth 1 -type f -executable -name 'mchess_[0-9]*' | head -n1)
           if [ -z "$MCHESS_FEATURE" ]; then
             echo "No mchess_* binary found for feature_ref"; exit 1
           fi
