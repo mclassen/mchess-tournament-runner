@@ -26,7 +26,7 @@ jobs:
       - name: Checkout runner repo
         uses: actions/checkout@v4
 
-      - name: Checkout private MChess (base_ref = master/main)
+      - name: Checkout private MChess (base_ref)
         uses: actions/checkout@v4
         with:
           repository: ${{ env.PRIVATE_REPO }}
@@ -42,7 +42,7 @@ jobs:
           ref: ${{ github.event.inputs.feature_ref }}
           path: mchess-feature
 
-      - name: Install build deps
+      - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake g++ ninja-build
@@ -53,13 +53,13 @@ jobs:
           cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
           cmake --build build --target mchess -j"$(nproc)"
           ls -l build
-          REL=$(find build -maxdepth 1 -type f -executable -name 'mchess_[0-9]*' | head -n1)
+          REL=$(find build -maxdepth 1 -type f -executable -name 'mchess_*' | head -n1)
           if [ -z "$REL" ]; then
             echo "No mchess_* binary found for base_ref"; exit 1
           fi
-          MCHESS_BASE="$(pwd)/$REL"
-          echo "Base engine: $MCHESS_BASE"
-          echo "MCHESS_BASE=$MCHESS_BASE" >> "$GITHUB_ENV"
+          cp "$REL" ../mchess_master
+          chmod +x ../mchess_master
+          ls -l ../mchess_master
 
       - name: Build feature engine
         working-directory: mchess-feature
@@ -67,39 +67,23 @@ jobs:
           cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
           cmake --build build --target mchess -j"$(nproc)"
           ls -l build
-          REL=$(find build -maxdepth 1 -type f -executable -name 'mchess_[0-9]*' | head -n1)
+          REL=$(find build -maxdepth 1 -type f -executable -name 'mchess_*' | head -n1)
           if [ -z "$REL" ]; then
             echo "No mchess_* binary found for feature_ref"; exit 1
           fi
-          MCHESS_FEATURE="$(pwd)/$REL"
-          echo "Feature engine: $MCHESS_FEATURE"
-          echo "MCHESS_FEATURE=$MCHESS_FEATURE" >> "$GITHUB_ENV"
+          cp "$REL" ../mchess_feature
+          chmod +x ../mchess_feature
+          ls -l ../mchess_feature
 
-      ###############################################
-      # ✅ THIS IS THE NEW FASTCHESS COPY STEP
-      ###############################################
       - name: Copy fastchess from private repo
         run: |
           cp mchess-feature/third_party/fastchess-linux-x86-64/fastchess ./fastchess
           chmod +x fastchess
           ls -l fastchess
 
-      ###############################################
-      # ⛔ REMOVE THIS (BROKEN) STEP IF YOU HAD IT:
-      #
-      # - name: Download fastchess
-      #   run: |
-      #     curl -L -o fastchess "$FASTCHESS_URL"
-      #     chmod +x fastchess
-      #     ls -l fastchess
-      ###############################################
-
       - name: Ensure run_tournament.sh is executable
         run: chmod +x run_tournament.sh
 
-      ###############################################
-      # Bundle creation now includes real fastchess
-      ###############################################
       - name: Create bundle tarball
         run: |
           tar czf mchess_bundle.tar.gz \
