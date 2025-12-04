@@ -1,78 +1,119 @@
-name: Build and Release MChess bundle
+name: Build bundle (master vs feature)
 
 on:
   workflow_dispatch:
     inputs:
-      mchess_ref:
-        description: "Ref (branch/tag) in private MChess repo"
+      feature_ref:
+        description: "Feature branch or ref in mclassen/mchess"
+        required: true
+      base_ref:
+        description: "Base ref (usually main) in mclassen/mchess"
         required: true
         default: "main"
       release_tag:
-        description: "Tag name for this bundle (e.g. v0.1.0)"
+        description: "Tag name for this bundle (e.g. master-vs-my-feature)"
         required: true
-        default: "v0.1.0"
+        default: "master-vs-feature"
 
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
 
     env:
-      PRIVATE_REPO: mclassen/MChess
-      FASTCHESS_URL: https://github.com/official-stockfish/fastchess/releases/download/v0.10.0/fastchess-x86_64-linux
+      PRIVATE_REPO: mclassen/mchess
 
     steps:
       - name: Checkout runner repo
         uses: actions/checkout@v4
 
-      - name: Checkout private MChess repo
+      - name: Checkout private MChess (base_ref = master/main)
         uses: actions/checkout@v4
         with:
           repository: ${{ env.PRIVATE_REPO }}
           token: ${{ secrets.MCHESS_PRIVATE_TOKEN }}
-          ref: ${{ github.event.inputs.mchess_ref }}
-          path: mchess-src
+          ref: ${{ github.event.inputs.base_ref }}
+          path: mchess-base
 
-      - name: Install build dependencies
+      - name: Checkout private MChess (feature_ref)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PRIVATE_REPO }}
+          token: ${{ secrets.MCHESS_PRIVATE_TOKEN }}
+          ref: ${{ github.event.inputs.feature_ref }}
+          path: mchess-feature
+
+      - name: Install build deps
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake g++ ninja-build
 
-      - name: Build MChess (Release)
-        working-directory: mchess-src
+      - name: Build base (master) engine
+        working-directory: mchess-base
         run: |
           cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
           cmake --build build --target mchess -j"$(nproc)"
           ls -l build
-
-      - name: Copy mchess binary into runner repo
-        run: |
-          MCHESS_BIN=$(find mchess-src/build -maxdepth 1 -type f -name 'mchess_*' | head -n1)
-          if [ -z "$MCHESS_BIN" ]; then
-            echo "No mchess_* binary found"; exit 1
+          REL=$(find build -maxdepth 1 -type f -executable -name 'mchess_[0-9]*' | head -n1)
+          if [ -z "$REL" ]; then
+            echo "No mchess_* binary found for base_ref"; exit 1
           fi
-          cp "$MCHESS_BIN" ./mchess
-          chmod +x ./mchess
-          ls -l ./mchess
+          MCHESS_BASE="$(pwd)/$REL"
+          echo "Base engine: $MCHESS_BASE"
+          echo "MCHESS_BASE=$MCHESS_BASE" >> "$GITHUB_ENV"
 
-      - name: Download fastchess
+      - name: Build feature engine
+        working-directory: mchess-feature
         run: |
-          curl -L -o fastchess "$FASTCHESS_URL"
+          cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --target mchess -j"$(nproc)"
+          ls -l build
+          REL=$(find build -maxdepth 1 -type f -executable -name 'mchess_[0-9]*' | head -n1)
+          if [ -z "$REL" ]; then
+            echo "No mchess_* binary found for feature_ref"; exit 1
+          fi
+          MCHESS_FEATURE="$(pwd)/$REL"
+          echo "Feature engine: $MCHESS_FEATURE"
+          echo "MCHESS_FEATURE=$MCHESS_FEATURE" >> "$GITHUB_ENV"
+
+      ###############################################
+      # ✅ THIS IS THE NEW FASTCHESS COPY STEP
+      ###############################################
+      - name: Copy fastchess from private repo
+        run: |
+          cp mchess-feature/third_party/fastchess-linux-x86-64/fastchess ./fastchess
           chmod +x fastchess
           ls -l fastchess
+
+      ###############################################
+      # ⛔ REMOVE THIS (BROKEN) STEP IF YOU HAD IT:
+      #
+      # - name: Download fastchess
+      #   run: |
+      #     curl -L -o fastchess "$FASTCHESS_URL"
+      #     chmod +x fastchess
+      #     ls -l fastchess
+      ###############################################
 
       - name: Ensure run_tournament.sh is executable
         run: chmod +x run_tournament.sh
 
+      ###############################################
+      # Bundle creation now includes real fastchess
+      ###############################################
       - name: Create bundle tarball
         run: |
-          tar czf mchess_bundle.tar.gz mchess fastchess run_tournament.sh
+          tar czf mchess_bundle.tar.gz \
+            mchess_master \
+            mchess_feature \
+            fastchess \
+            run_tournament.sh
           ls -lh mchess_bundle.tar.gz
 
       - name: Create GitHub Release and upload asset
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.release_tag }}
-          name: MChess bundle ${{ github.event.inputs.release_tag }}
+          name: MChess master vs ${{ github.event.inputs.feature_ref }}
           draft: false
           prerelease: false
           files: mchess_bundle.tar.gz
