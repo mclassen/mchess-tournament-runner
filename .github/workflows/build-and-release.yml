@@ -61,6 +61,12 @@ jobs:
           chmod +x ../mchess_master
           ls -l ../mchess_master
 
+      - name: Copy fastchess from base (main) checkout
+        run: |
+          cp mchess-base/third_party/fastchess-linux-x86-64/fastchess ./fastchess
+          chmod +x fastchess
+          ls -l fastchess
+
       - name: Build feature engine
         working-directory: mchess-feature
         run: |
@@ -74,12 +80,6 @@ jobs:
           cp "$REL" ../mchess_feature
           chmod +x ../mchess_feature
           ls -l ../mchess_feature
-
-      - name: Copy fastchess from runner repo
-        run: |
-          cp third_party/fastchess-linux-x86-64/fastchess ./fastchess
-          chmod +x fastchess
-          ls -l fastchess
 
       - name: Ensure run_tournament.sh is executable
         run: chmod +x run_tournament.sh
