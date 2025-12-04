@@ -1,16 +1,19 @@
-name: Build and Release MChess bundle
+name: Build bundle (master vs feature)
 
 on:
   workflow_dispatch:
     inputs:
-      mchess_ref:
-        description: "Ref (branch/tag) in private MChess repo"
+      feature_ref:
+        description: "Feature branch or ref in mclassen/MChess"
+        required: true
+      base_ref:
+        description: "Base ref (usually main) in mclassen/MChess"
         required: true
         default: "main"
       release_tag:
-        description: "Tag name for this bundle (e.g. v0.1.0)"
+        description: "Tag name for this bundle (e.g. master-vs-my-feature)"
         required: true
-        default: "v0.1.0"
+        default: "master-vs-feature"
 
 jobs:
   build-and-release:
@@ -24,35 +27,55 @@ jobs:
       - name: Checkout runner repo
         uses: actions/checkout@v4
 
-      - name: Checkout private MChess repo
+      - name: Checkout private MChess (base_ref = master/main)
         uses: actions/checkout@v4
         with:
           repository: ${{ env.PRIVATE_REPO }}
           token: ${{ secrets.MCHESS_PRIVATE_TOKEN }}
-          ref: ${{ github.event.inputs.mchess_ref }}
-          path: mchess-src
+          ref: ${{ github.event.inputs.base_ref }}
+          path: mchess-base
 
-      - name: Install build dependencies
+      - name: Checkout private MChess (feature_ref)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PRIVATE_REPO }}
+          token: ${{ secrets.MCHESS_PRIVATE_TOKEN }}
+          ref: ${{ github.event.inputs.feature_ref }}
+          path: mchess-feature
+
+      - name: Install build deps
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake g++ ninja-build
 
-      - name: Build MChess (Release)
-        working-directory: mchess-src
+      - name: Build base (master) engine
+        working-directory: mchess-base
         run: |
           cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
           cmake --build build --target mchess -j"$(nproc)"
-          ls -l build
-
-      - name: Copy mchess binary into runner repo
-        run: |
-          MCHESS_BIN=$(find mchess-src/build -maxdepth 1 -type f -name 'mchess_*' | head -n1)
-          if [ -z "$MCHESS_BIN" ]; then
-            echo "No mchess_* binary found"; exit 1
+          MCHESS_BASE=$(find build -maxdepth 1 -type f -name 'mchess_*' | head -n1)
+          if [ -z "$MCHESS_BASE" ]; then
+            echo "No mchess_* binary found for base_ref"; exit 1
           fi
-          cp "$MCHESS_BIN" ./mchess
-          chmod +x ./mchess
-          ls -l ./mchess
+          echo "MCHESS_BASE=$MCHESS_BASE" >> "$GITHUB_ENV"
+
+      - name: Build feature engine
+        working-directory: mchess-feature
+        run: |
+          cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --target mchess -j"$(nproc)"
+          MCHESS_FEATURE=$(find build -maxdepth 1 -type f -name 'mchess_*' | head -n1)
+          if [ -z "$MCHESS_FEATURE" ]; then
+            echo "No mchess_* binary found for feature_ref"; exit 1
+          fi
+          echo "MCHESS_FEATURE=$MCHESS_FEATURE" >> "$GITHUB_ENV"
+
+      - name: Copy engines into runner repo
+        run: |
+          cp "$MCHESS_BASE" ./mchess_master
+          cp "$MCHESS_FEATURE" ./mchess_feature
+          chmod +x ./mchess_master ./mchess_feature
+          ls -l ./mchess_master ./mchess_feature
 
       - name: Download fastchess
         run: |
@@ -65,14 +88,14 @@ jobs:
 
       - name: Create bundle tarball
         run: |
-          tar czf mchess_bundle.tar.gz mchess fastchess run_tournament.sh
+          tar czf mchess_bundle.tar.gz mchess_master mchess_feature fastchess run_tournament.sh
           ls -lh mchess_bundle.tar.gz
 
       - name: Create GitHub Release and upload asset
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.release_tag }}
-          name: MChess bundle ${{ github.event.inputs.release_tag }}
+          name: MChess master vs ${{ github.event.inputs.feature_ref }}
           draft: false
           prerelease: false
           files: mchess_bundle.tar.gz
