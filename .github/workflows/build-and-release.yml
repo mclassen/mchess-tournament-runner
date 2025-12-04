@@ -75,9 +75,9 @@ jobs:
           chmod +x ../mchess_feature
           ls -l ../mchess_feature
 
-      - name: Copy fastchess from private repo
+      - name: Copy fastchess from runner repo
         run: |
-          cp mchess-feature/third_party/fastchess-linux-x86-64/fastchess ./fastchess
+          cp third_party/fastchess-linux-x86-64/fastchess ./fastchess
           chmod +x fastchess
           ls -l fastchess
 
