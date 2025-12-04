@@ -54,13 +54,13 @@ jobs:
           cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
           cmake --build build --target mchess -j"$(nproc)"
           ls -l build
-          MCHESS_BASE=$(find build -maxdepth 1 -type f -executable -name 'mchess_[0-9]*' | head -n1)
-          echo "Base engine: $MCHESS_BASE"
-          if [ -z "$MCHESS_BASE" ]; then
+          REL=$(find build -maxdepth 1 -type f -executable -name 'mchess_[0-9]*' | head -n1)
+          if [ -z "$REL" ]; then
             echo "No mchess_* binary found for base_ref"; exit 1
           fi
+          MCHESS_BASE="$(pwd)/$REL"
+          echo "Base engine: $MCHESS_BASE"
           echo "MCHESS_BASE=$MCHESS_BASE" >> "$GITHUB_ENV"
-
 
       - name: Build feature engine
         working-directory: mchess-feature
@@ -68,13 +68,13 @@ jobs:
           cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
           cmake --build build --target mchess -j"$(nproc)"
           ls -l build
-          MCHESS_FEATURE=$(find build -maxdepth 1 -type f -executable -name 'mchess_[0-9]*' | head -n1)
-          echo "Feature engine: $MCHESS_FEATURE"
-          if [ -z "$MCHESS_FEATURE" ]; then
+          REL=$(find build -maxdepth 1 -type f -executable -name 'mchess_[0-9]*' | head -n1)
+          if [ -z "$REL" ]; then
             echo "No mchess_* binary found for feature_ref"; exit 1
           fi
+          MCHESS_FEATURE="$(pwd)/$REL"
+          echo "Feature engine: $MCHESS_FEATURE"
           echo "MCHESS_FEATURE=$MCHESS_FEATURE" >> "$GITHUB_ENV"
-
 
       - name: Copy engines into runner repo
         run: |
