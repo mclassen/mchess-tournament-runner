@@ -1,0 +1,80 @@
+name: Build and Release MChess bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      mchess_ref:
+        description: "Ref (branch/tag) in private MChess repo"
+        required: true
+        default: "main"
+      release_tag:
+        description: "Tag name for this bundle (e.g. v0.1.0)"
+        required: true
+        default: "v0.1.0"
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    env:
+      PRIVATE_REPO: mclassen/MChess
+      FASTCHESS_URL: https://github.com/official-stockfish/fastchess/releases/download/v0.10.0/fastchess-x86_64-linux
+
+    steps:
+      - name: Checkout runner repo
+        uses: actions/checkout@v4
+
+      - name: Checkout private MChess repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PRIVATE_REPO }}
+          token: ${{ secrets.MCHESS_PRIVATE_TOKEN }}
+          ref: ${{ github.event.inputs.mchess_ref }}
+          path: mchess-src
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ ninja-build
+
+      - name: Build MChess (Release)
+        working-directory: mchess-src
+        run: |
+          cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --target mchess -j"$(nproc)"
+          ls -l build
+
+      - name: Copy mchess binary into runner repo
+        run: |
+          MCHESS_BIN=$(find mchess-src/build -maxdepth 1 -type f -name 'mchess_*' | head -n1)
+          if [ -z "$MCHESS_BIN" ]; then
+            echo "No mchess_* binary found"; exit 1
+          fi
+          cp "$MCHESS_BIN" ./mchess
+          chmod +x ./mchess
+          ls -l ./mchess
+
+      - name: Download fastchess
+        run: |
+          curl -L -o fastchess "$FASTCHESS_URL"
+          chmod +x fastchess
+          ls -l fastchess
+
+      - name: Ensure run_tournament.sh is executable
+        run: chmod +x run_tournament.sh
+
+      - name: Create bundle tarball
+        run: |
+          tar czf mchess_bundle.tar.gz mchess fastchess run_tournament.sh
+          ls -lh mchess_bundle.tar.gz
+
+      - name: Create GitHub Release and upload asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag }}
+          name: MChess bundle ${{ github.event.inputs.release_tag }}
+          draft: false
+          prerelease: false
+          files: mchess_bundle.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
